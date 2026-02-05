@@ -3,7 +3,7 @@ import process = require('process');
 
 export const db = new Pool({
   connectionString: process.env.DATABASE_URL,
-  
+  ssl: true
 });
 
  
