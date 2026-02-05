@@ -12,16 +12,10 @@ app.use(express.json());
 app.use('/auth', authRoutes);
 
 app.get('/health', async (_, res) => {
+ 
+  let x = checkDB();
 
-  const client =  db.connect();
-  const result =  (await client).query(`
-        SELECT 
-        current_database() AS db,
-        current_schema() AS schema,
-        current_user AS user
-      `);
-  
-  res.json({ status: (await result).rows[0]  });
+  res.json({ status: x  });
 });
 
 
@@ -45,6 +39,8 @@ export async function checkDB() {
       result.rows.forEach(row => {
         console.log(`- ${row.table_schema}.${row.table_name}`);
       });
+
+      return result.rows[0];
   
       client.release();
 }
