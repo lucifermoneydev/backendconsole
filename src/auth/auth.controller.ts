@@ -110,7 +110,7 @@ export async function verifyEmail(req: Request, res: Response) {
   const { token } = req.query;
 
   if (!token || typeof token !== 'string') {
-    return res.status(400).json({ message: 'Missing verification token' });
+    return res.status(400).json({ message: 'Missing verification token' , token });
   }
 
   let payload: any;
