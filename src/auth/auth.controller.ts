@@ -75,13 +75,20 @@ export async function signup(req: Request, res: Response) {
 
   const userId = userResult.rows[0].id;
 
+
+
   await db.query(
     `
-    INSERT INTO email_verifications (user_id, code)
-    VALUES ($1, $2)
+    INSERT INTO email_verifications (user_id, code, expires_at)
+    VALUES ($1, $2, NOW() + INTERVAL '5 minutes')
+    ON CONFLICT (user_id)
+    DO UPDATE SET
+      code = EXCLUDED.code,
+      expires_at = NOW() + INTERVAL '5 minutes'
     `,
     [userId, otp]
   );
+
 
   // TODO: send email with OTP
   console.log('EMAIL OTP:', otp);
@@ -108,9 +115,10 @@ export async function signup(req: Request, res: Response) {
 ========================= */
 export async function verifyEmail(req: Request, res: Response) {
   const { token } = req.query;
+  const { code } = req.body;
 
   if (!token || typeof token !== 'string') {
-    return res.status(400).json({ message: 'Missing verification token' , token });
+    return res.status(400).json({ message: 'Missing verification token' , rescode : 0  });
   }
 
   let payload: any;
@@ -118,33 +126,54 @@ export async function verifyEmail(req: Request, res: Response) {
   try {
     payload = jwt.verify(token, process.env.JWT_SECRET!);
   } catch {
-    return res.status(401).json({ message: 'Invalid or expired token' });
+    return res.status(401).json({ message: 'Invalid or expired token' , rescode : 1 });
   }
 
   if (payload.purpose !== 'email_verify') {
-    return res.status(400).json({ message: 'Invalid verification token' });
+    return res.status(400).json({ message: 'Invalid verification token', rescode : 2 });
   }
 
   const { userId } = payload;
 
-  // Optional: ensure not already verified
-  const user = await db.query(
-    `SELECT email_verified FROM users WHERE id = $1`,
+  // 3️⃣ Check OTP record
+  const record = await db.query(
+    `
+    SELECT code, expires_at
+    FROM email_verifications
+    WHERE user_id = $1
+    `,
     [userId]
   );
 
-  if (user.rowCount === 0) {
-    return res.status(404).json({ message: 'User not found' });
+  if (record.rowCount === 0) {
+    return res.status(400).json({ message: 'Verification code not found', rescode : 3});
   }
 
-  if (user.rows[0].email_verified) {
-    return res.json({ message: 'Email already verified' });
+  const verification = record.rows[0];
+
+  // 4️⃣ Check OTP match
+  if (verification.code !== code) {
+    return res.status(400).json({ message: 'Invalid verification code' , rescode : 4});
   }
+
+  // 5️⃣ Check expiry
+  if (new Date(verification.expires_at) < new Date()) {
+    return res.status(400).json({ message: 'Verification code expired' , rescode : 5});
+  }
+
+  
 
   await db.query(
     `UPDATE users SET email_verified = true WHERE id = $1`,
     [userId]
   );
+
+  // 7️⃣ Cleanup OTP
+  await db.query(
+    `DELETE FROM email_verifications WHERE user_id = $1`,
+    [userId]
+  );
+
 
   const accessToken = signAccessToken({ userId });
   const refreshToken = signRefreshToken({ userId });
@@ -152,7 +181,8 @@ export async function verifyEmail(req: Request, res: Response) {
   return res.json({
     message: 'Email verified successfully',
     accessToken,
-    refreshToken
+    refreshToken,
+    rescode : 6
   });
 }
 
