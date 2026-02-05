@@ -7,7 +7,8 @@ import {
   signTempToken
 } from '../utils/jwt';
 import { generateOTP } from './otp';
-
+import jwt from 'jsonwebtoken';
+ 
 
 /* =========================
    Test API CheckDB
@@ -85,11 +86,20 @@ export async function signup(req: Request, res: Response) {
   // TODO: send email with OTP
   console.log('EMAIL OTP:', otp);
 
-  const tempToken = signTempToken({ userId });
+  // const tempToken = signTempToken({ userId });
+
+  const verificationToken = jwt.sign(
+    {
+      userId: userId,
+      purpose: 'email_verify'
+    },
+    process.env.JWT_SECRET!,
+    { expiresIn: '15m' }
+  );
 
   res.status(201).json({
     requiresVerification: true,
-    tempToken
+    tempToken : verificationToken
   });
 }
 
@@ -97,37 +107,38 @@ export async function signup(req: Request, res: Response) {
    VERIFY EMAIL
 ========================= */
 export async function verifyEmail(req: Request, res: Response) {
-  const authHeader = req.headers.authorization;
-  const { code } = req.body;
+  const { token } = req.query;
 
-  if (!authHeader || !code) {
-    return res.status(400).json({ message: 'Invalid request' });
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ message: 'Missing verification token' });
   }
 
-  const token = authHeader.split(' ')[1];
-
   let payload: any;
+
   try {
-    payload = require('jsonwebtoken').verify(
-      token,
-      process.env.JWT_SECRET!
-    );
+    payload = jwt.verify(token, process.env.JWT_SECRET!);
   } catch {
-    return res.status(401).json({ message: 'Invalid token' });
+    return res.status(401).json({ message: 'Invalid or expired token' });
+  }
+
+  if (payload.purpose !== 'email_verify') {
+    return res.status(400).json({ message: 'Invalid verification token' });
   }
 
   const { userId } = payload;
 
-  const record = await db.query(
-    `
-    SELECT * FROM email_verifications
-    WHERE user_id = $1 AND code = $2
-    `,
-    [userId, code]
+  // Optional: ensure not already verified
+  const user = await db.query(
+    `SELECT email_verified FROM users WHERE id = $1`,
+    [userId]
   );
 
-  if (record.rowCount === 0) {
-    return res.status(400).json({ message: 'Invalid verification code' });
+  if (user.rowCount === 0) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  if (user.rows[0].email_verified) {
+    return res.json({ message: 'Email already verified' });
   }
 
   await db.query(
@@ -135,15 +146,11 @@ export async function verifyEmail(req: Request, res: Response) {
     [userId]
   );
 
-  await db.query(
-    `DELETE FROM email_verifications WHERE user_id = $1`,
-    [userId]
-  );
-
   const accessToken = signAccessToken({ userId });
   const refreshToken = signRefreshToken({ userId });
 
-  res.json({
+  return res.json({
+    message: 'Email verified successfully',
     accessToken,
     refreshToken
   });
