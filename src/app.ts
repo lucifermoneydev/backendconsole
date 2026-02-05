@@ -22,7 +22,7 @@ export async function checkDB() {
 
       const client = await db.connect();
 
-      console.log(" ✅ PostgreSQL connected");
+      console.log(" ✅ PostgreSQL connected Hi");
       console.log("DATABASE_URL = ", process.env.DATABASE_URL);
   
       const result = await client.query(`
