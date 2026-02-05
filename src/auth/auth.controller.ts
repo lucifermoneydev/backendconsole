@@ -14,7 +14,8 @@ import { generateOTP } from './otp';
 ========================= */
 
 export async function checkDB() {
-    const client = await db.connect();
+  try {
+     const client = await db.connect();
       console.log(" ✅ PostgreSQL connected");
       console.log("DATABASE_URL = ", process.env.DATABASE_URL);
   
@@ -34,6 +35,10 @@ export async function checkDB() {
   
   
       client.release();
+  } catch (e) {
+       console.log(" E 🧠 DB INFO:" + e);
+  }
+      
 }
 
 /* =========================
