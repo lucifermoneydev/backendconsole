@@ -11,10 +11,17 @@ app.use(express.json());
 
 app.use('/auth', authRoutes);
 
-app.get('/health', (_, res) => {
+app.get('/health', async (_, res) => {
 
-  checkDB()
-  res.json({ status: 'ok' });
+  const client =  db.connect();
+  const result =  (await client).query(`
+        SELECT 
+        current_database() AS db,
+        current_schema() AS schema,
+        current_user AS user
+      `);
+  
+  res.json({ status: (await result).rows[0]  });
 });
 
 
