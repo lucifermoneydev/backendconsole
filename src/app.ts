@@ -3,6 +3,7 @@ import cors from 'cors';
 import { db } from './config/db';
 
 import authRoutes from './auth/auth.routes';
+import consoleRoutes from './console/console.routes';
 
 const app = express();
 
@@ -18,6 +19,7 @@ app.get('/health', async (_, res) => {
   res.json({ status: x  });
 });
 
+app.use('/console', consoleRoutes);
 
 export async function checkDB() {
 
